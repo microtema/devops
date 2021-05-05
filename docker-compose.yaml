@@ -1,0 +1,93 @@
+version: "3"
+networks:
+  devops:
+    external: false
+services:
+  gitea:
+    image: gitea/gitea:1.13.6
+    container_name: gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - DB_TYPE=postgres
+      - DB_HOST=db_gitea:5432
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+    restart: always
+    networks:
+      - devops
+    volumes:
+      - ./volumes/gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 3000:3000
+      - 222:22
+    depends_on:
+      - db_gitea
+  db_gitea:
+     image: postgres:9.6
+     container_name: db_gitea
+     restart: always
+     environment:
+       - POSTGRES_USER=gitea
+       - POSTGRES_PASSWORD=gitea
+       - POSTGRES_DB=gitea
+     networks:
+       - devops
+     volumes:
+       - ./volumes/db_gitea:/var/lib/postgresql/data
+  jenkins:
+    image: jenkins/jenkins:jdk11
+    container_name: jenkins
+    privileged: true
+    user: root
+    ports:
+      - 8081:8080
+      - 50000:50000
+    networks:
+      - devops
+    volumes:
+      - ./volumes/jenkins:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/local/bin/docker:/usr/local/bin/docker
+  sonarqube:
+    image: sonarqube:latest
+    container_name: sonarqube
+    depends_on:
+      - db_sonarqube
+    ports:
+      - 9000:9000
+    networks:
+      - devops
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db_sonarqube:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+    volumes:
+      - ./volumes/sonarqube_data:/opt/sonarqube/data
+      - ./volumes/sonarqube_extensions:/opt/sonarqube/extensions
+      - ./volumes/sonarqube_logs:/opt/sonarqube/logs
+      - ./volumes/sonarqube_temp:/opt/sonarqube/temp
+  db_sonarqube:
+    image: postgres:9.6
+    container_name: db_sonarqube
+    networks:
+      - devops
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+    volumes:
+      - ./volumes/db_sonarqube:/var/lib/postgresql
+      # This needs explicit mapping due to https://github.com/docker-library/postgres/blob/4e48e3228a30763913ece952c611e5e9b95c8759/Dockerfile.template#L52
+      - ./volumes/db_sonarqube_data:/var/lib/postgresql/data
+  nexus:
+    image: sonatype/nexus3
+    container_name: nexus
+    networks:
+      - devops
+    ports:
+     - 8680:8081
+    volumes:
+    - ./volumes/nexus:/nexus-data
